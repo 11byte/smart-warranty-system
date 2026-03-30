@@ -1,0 +1,16 @@
+Front end:
+- npm run dev
+
+Back end:
+
+Terminal 1:
+- cd blockchain
+- npx hardhat node
+
+Terminal 2:
+- cd blockchain
+# copy & paste the contract_address = "xxx" from terminal output and paste in /BlockchainService.py
+- npx hardhat run scripts/deploy.js --network localhost
+
+Terminal 3:
+- cd backend
