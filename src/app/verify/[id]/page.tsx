@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { motion } from "framer-motion";
+import toast from "react-hot-toast";
 import {
   ShieldCheck,
   Loader2,
@@ -34,13 +35,31 @@ export default function VerifyPage() {
       setStep(2);
       await delay(1000);
 
-      const email = localStorage.getItem("email");
+      const email = localStorage.getItem("email")?.toLowerCase();
 
       const res = await axios.get(
         `http://localhost:5000/api/product/verify/${id}?email=${email}`,
       );
 
-      setData(res.data);
+      const result = res.data;
+
+      setData(result);
+
+      if (result.status === "claimed") {
+        toast.success("You are now the owner of this product");
+      }
+
+      if (result.status === "owner") {
+        toast.success("You already own this product");
+      }
+
+      if (result.status === "locked") {
+        toast.error("This product is already owned by another user");
+      }
+
+      if (result.status === "invalid_user") {
+        toast.error("Invalid user session");
+      }
 
       // 🔐 Generate product hash
       setHash(generateHash(id.toString()));

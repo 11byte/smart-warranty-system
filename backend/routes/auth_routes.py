@@ -103,5 +103,20 @@ def login():
         "token": token,
         "role": user["role"],
         "name": user["name"],
-        "email": user["email"]  
+        "email": user["email"],
+        "wallet": user["wallet"]
     })
+
+@user_routes.route("/<email>", methods=["GET"])
+def get_user(email):
+    db = current_app.config["DB"]
+
+    user = db.users.find_one(
+        {"email": email.lower()},
+        {"_id": 0, "password": 0}
+    )
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    return jsonify(user)

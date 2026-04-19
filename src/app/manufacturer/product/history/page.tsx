@@ -14,7 +14,7 @@ export default function ProductHistory() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/product/");
+        const res = await axios.get("http://localhost:5000/api/product/list");
         setProducts(res.data);
       } catch (err) {
         console.error(err);

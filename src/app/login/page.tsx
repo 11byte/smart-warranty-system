@@ -25,6 +25,7 @@ export default function LoginPage() {
       localStorage.setItem("role", res.data.role);
       localStorage.setItem("name", res.data.name);
       localStorage.setItem("email", res.data.email);
+      localStorage.setItem("wallet", res.data.wallet);
 
       if (res.data.role === "manufacturer") {
         router.push("/home");

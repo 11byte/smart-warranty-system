@@ -3,12 +3,28 @@ pragma solidity ^0.8.0;
 
 contract ProductRegistry {
 
+    /* ================= EVENTS ================= */
+
     event OwnershipTransferred(
-    string productId,
-    address from,
-    address to,
-    uint256 timestamp
-);
+        string productId,
+        address from,
+        address to,
+        uint256 timestamp
+    );
+
+    event OwnershipClaimed(
+        string productId,
+        address owner,
+        uint256 timestamp
+    );
+
+    event OwnershipReleased(
+        string productId,
+        address owner,
+        uint256 timestamp
+    );
+
+    /* ================= STRUCT ================= */
 
     struct Product {
         string productId;
@@ -18,21 +34,31 @@ contract ProductRegistry {
     }
 
     mapping(string => Product) public products;
+    mapping(string => address) public owners;
+
+    /* ================= REGISTER ================= */
 
     function registerProduct(
-    string memory _productId,
-    string memory _name,
-    string memory _serial
-) public {
-    products[_productId] = Product(
-        _productId,
-        _name,
-        _serial,
-        block.timestamp
-    );
+        string memory _productId,
+        string memory _name,
+        string memory _serial
+    ) public {
+        require(
+            bytes(products[_productId].productId).length == 0,
+            "Already registered"
+        );
 
-    owners[_productId] = msg.sender;
-}
+        products[_productId] = Product(
+            _productId,
+            _name,
+            _serial,
+            block.timestamp
+        );
+
+        // owner remains EMPTY (unclaimed)
+    }
+
+    /* ================= VERIFY ================= */
 
     function verifyProduct(string memory _productId)
         public
@@ -42,23 +68,52 @@ contract ProductRegistry {
         return bytes(products[_productId].productId).length > 0;
     }
 
+    /* ================= CLAIM ================= */
 
-    mapping(string => address) public owners;
+    function claimOwnership(string memory _productId) public {
+        require(
+            bytes(products[_productId].productId).length > 0,
+            "Product not found"
+        );
 
-function transferOwnership(string memory _productId, address newOwner) public {
-    require(bytes(products[_productId].productId).length > 0, "Product not found");
-    require(msg.sender == owners[_productId], "Not owner");
+        require(
+            owners[_productId] == address(0),
+            "Already claimed"
+        );
 
-    address oldOwner = owners[_productId];
+        owners[_productId] = msg.sender;
 
-    owners[_productId] = newOwner;
+        emit OwnershipClaimed(
+            _productId,
+            msg.sender,
+            block.timestamp
+        );
+    }
 
-    emit OwnershipTransferred(
-        _productId,
-        oldOwner,
-        newOwner,
-        block.timestamp
-    );
+    /* ================= DISOWN ================= */
+
+    function releaseOwnership(string memory _productId) public {
+        require(
+            owners[_productId] == msg.sender,
+            "Not owner"
+        );
+
+        owners[_productId] = address(0);
+
+        emit OwnershipReleased(
+            _productId,
+            msg.sender,
+            block.timestamp
+        );
+    }
+
+    /* ================= VIEW ================= */
+
+    function getOwner(string memory _productId)
+        public
+        view
+        returns (address)
+    {
+        return owners[_productId];
+    }
 }
-}
-

@@ -4,181 +4,132 @@ import Navbar from "../components/Navbar";
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { motion } from "framer-motion";
+import { Loader2, Unlock, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { ArrowRight, Loader2 } from "lucide-react";
 
-export default function TransferPage() {
+export default function OwnershipPage() {
   const [products, setProducts] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
 
-  const [productId, setProductId] = useState("");
-  const [newOwner, setNewOwner] = useState("");
-
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
-
-  /* ================= FETCH DATA ================= */
+  /* ================= INIT ================= */
 
   useEffect(() => {
-    fetchOptions();
+    const wallet = localStorage.getItem("wallet");
+    const email = localStorage.getItem("email");
+
+    if (wallet && email) {
+      setUser({ email, wallet });
+      fetchProducts(wallet);
+    }
   }, []);
 
-  const fetchOptions = async () => {
-    const p = await axios.get("http://localhost:5000/api/product/list");
-    const u = await axios.get("http://localhost:5000/api/users/list");
+  const fetchProducts = async (wallet: string) => {
+    const res = await axios.get("http://localhost:5000/api/product/list");
 
-    setProducts(p.data);
-    setUsers(u.data);
+    // 🔥 FILTER ONLY OWNED PRODUCTS
+    const owned = res.data.filter((p: any) => p.owner === wallet);
+    setProducts(owned);
   };
 
-  /* ================= TRANSFER ================= */
+  /* ================= DISOWN ================= */
 
-  const handleTransfer = async () => {
-    if (!productId || !newOwner) return;
+  const handleDisown = async (productId: string) => {
+    if (!user) return;
 
-    setLoading(true);
-    setResult(null);
+    setLoadingId(productId);
 
     try {
-      const res = await axios.post(
-        "http://localhost:5000/api/product/transfer",
-        { productId, newOwner },
-      );
-
-      setResult(res.data);
-    } catch (err: any) {
-      setResult({
-        error: err.response?.data?.error || "Transfer failed",
+      await axios.post("http://localhost:5000/api/product/disown", {
+        productId,
+        email: user.email,
       });
+
+      // 🔥 REMOVE FROM UI
+      setProducts((prev) => prev.filter((p) => p.productId !== productId));
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Failed to release ownership");
     }
 
-    setLoading(false);
+    setLoadingId(null);
   };
 
-  const selectedProduct = products.find((p) => p.productId === productId);
-  const selectedUser = users.find((u) => u.wallet === newOwner);
+  /* ================= UI ================= */
 
   return (
     <div className="bg-gray-950 min-h-screen text-white">
       <Navbar />
 
-      <div className="max-w-2xl mx-auto px-6 py-16 space-y-10">
+      <div className="max-w-5xl mx-auto px-6 py-16">
         {/* HEADER */}
-        <div>
-          <h1 className="text-3xl font-semibold">Ownership Transfer</h1>
+        <div className="mb-10">
+          <h1 className="text-3xl font-semibold">Your Owned Products</h1>
           <p className="text-gray-400 mt-2">
-            Securely transfer product ownership on blockchain
+            Manage ownership of your verified products
           </p>
         </div>
 
-        {/* FORM CARD */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-6">
-          {/* PRODUCT SELECT */}
-          <div>
-            <label className="text-sm text-gray-400 mb-2 block">
-              Select Product
-            </label>
-
-            <select
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500"
-            >
-              <option value="">Choose product</option>
-              {products.map((p) => (
-                <option key={p.productId} value={p.productId}>
-                  {p.name} ({p.productId})
-                </option>
-              ))}
-            </select>
+        {/* EMPTY STATE */}
+        {products.length === 0 && (
+          <div className="text-center text-gray-500 mt-20">
+            <p>No owned products found</p>
+            <p className="text-sm mt-2">Verify a product to claim ownership</p>
           </div>
+        )}
 
-          {/* USER SELECT */}
-          <div>
-            <label className="text-sm text-gray-400 mb-2 block">
-              New Owner
-            </label>
-
-            <select
-              value={newOwner}
-              onChange={(e) => setNewOwner(e.target.value)}
-              className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500"
-            >
-              <option value="">Choose user</option>
-              {users
-                .filter((u) => u.wallet)
-                .map((u) => (
-                  <option key={u.wallet} value={u.wallet}>
-                    {u.name} ({u.wallet.slice(0, 6)}...)
-                  </option>
-                ))}
-            </select>
-          </div>
-
-          {/* PREVIEW */}
-          {selectedProduct && selectedUser && (
+        {/* PRODUCT LIST */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {products.map((p) => (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="bg-gray-950 border border-gray-800 rounded-xl p-4 text-sm"
+              key={p.productId}
+              whileHover={{ scale: 1.02 }}
+              className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4"
             >
-              <p className="text-gray-400">Transfer Preview</p>
-
-              <div className="flex justify-between mt-2">
-                <span>{selectedProduct.name}</span>
-                <ArrowRight size={16} />
-                <span>{selectedUser.name}</span>
+              {/* HEADER */}
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="text-green-500" size={18} />
+                  <p className="text-sm">You are the owner</p>
+                </div>
               </div>
-            </motion.div>
-          )}
 
-          {/* BUTTON */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            disabled={!productId || !newOwner || loading}
-            onClick={handleTransfer}
-            className="w-full bg-blue-600 py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="animate-spin" size={16} />
-                Processing...
-              </>
-            ) : (
-              "Transfer Ownership"
-            )}
-          </motion.button>
-        </div>
+              {/* DETAILS */}
+              <div>
+                <h2 className="text-lg font-medium">{p.name}</h2>
+                <p className="text-gray-400 text-sm mt-1">Serial: {p.serial}</p>
 
-        {/* RESULT */}
-        {result && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="bg-gray-900 border border-gray-800 rounded-xl p-5"
-          >
-            {result.error ? (
-              <p className="text-red-400">{result.error}</p>
-            ) : (
-              <>
-                <p className="text-green-400">
-                  Ownership transferred successfully
+                <p className="text-gray-500 text-xs mt-2 break-all">
+                  ID: {p.productId}
                 </p>
+              </div>
 
-                <p className="text-gray-500 text-xs break-all mt-2">
-                  TX: {result.txHash}
-                </p>
-
-                <Link href={`/transfer/history/${productId}`}>
-                  <button className="mt-4 text-blue-400 text-sm">
-                    View Ownership Timeline →
+              {/* ACTIONS */}
+              <div className="flex justify-between items-center pt-4 border-t border-gray-800">
+                {/* HISTORY */}
+                <Link href={`/transfer/history/${p.productId}`}>
+                  <button className="text-blue-400 text-sm hover:underline">
+                    View History
                   </button>
                 </Link>
-              </>
-            )}
-          </motion.div>
-        )}
+
+                {/* DISOWN */}
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleDisown(p.productId)}
+                  disabled={loadingId === p.productId}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 rounded-xl hover:bg-red-500/20 transition disabled:opacity-50"
+                >
+                  {loadingId === p.productId ? (
+                    <Loader2 className="animate-spin" size={14} />
+                  ) : (
+                    <Unlock size={14} />
+                  )}
+                  Release
+                </motion.button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-from web3 import Web3
+from web3 import Web3 
 import json
 
 # connect to hardhat
@@ -31,6 +31,14 @@ def register_on_chain(product_id, name, serial):
 
 def verify_on_chain(product_id):
     return contract.functions.verifyProduct(product_id).call()
+
+def claim_ownership(product_id):
+    tx = contract.functions.claimOwnership(product_id).transact({
+        "from": w3.eth.accounts[0]
+    })
+
+    receipt = w3.eth.wait_for_transaction_receipt(tx)
+    return receipt
 
 def transfer_ownership(product_id, new_owner):
     tx = contract.functions.transferOwnership(

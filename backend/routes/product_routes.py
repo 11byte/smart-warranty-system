@@ -1,19 +1,17 @@
+
+
 from flask import Blueprint, request, jsonify, current_app
 import uuid
 import time
+
+from more_itertools import last
 from models.product_model import create_product_object
 from services.BlockchainService import verify_on_chain, register_on_chain
 import hashlib
-from services.BlockchainService import transfer_ownership
 import datetime
 
 
 product_routes = Blueprint("product_routes", __name__)
-
-
-# ================= REGISTER PRODUCT =================
-from flask import request, jsonify, current_app
-from services.BlockchainService import register_on_chain
 
 
 
@@ -33,15 +31,13 @@ def register_product():
     product_id = str(uuid.uuid4())[:8]
 
     # 🔥 FIND MANUFACTURER
-    manufacturer = db.users.find_one({"email": data.get("email")})
+    manufacturer = db.users.find_one({
+    "email": data.get("email").lower()
+    })
 
     if not manufacturer:
         return jsonify({"error": "Manufacturer not found"}), 404
 
-    wallet = manufacturer.get("wallet")
-
-    if not wallet:
-        return jsonify({"error": "Manufacturer has no wallet"}), 400
 
     # 🔥 BLOCKCHAIN REGISTRATION
     try:
@@ -56,11 +52,11 @@ def register_product():
 
     # 🔥 OPTIONAL: INITIAL OWNERSHIP LOG
     db.ownership_history.insert_one({
-        "productId": product_id,
-        "from": None,
-        "to": wallet,
-        "txHash": "GENESIS",
-        "timestamp": int(datetime.datetime.utcnow().timestamp())
+    "productId": product_id,
+    "from": None,
+    "to": None,
+    "type": "GENESIS",
+    "timestamp": int(datetime.datetime.utcnow().timestamp())
     })
 
     return jsonify({
@@ -75,7 +71,6 @@ def register_product():
 def verify(product_id):
     db = current_app.config["DB"]
 
-    # 🔥 GET USER FROM QUERY PARAM (frontend sends it)
     user_email = request.args.get("email", "").lower()
 
     def log_verification(authentic, reason):
@@ -88,67 +83,174 @@ def verify(product_id):
                 "reason": reason
             })
 
+    # 🔍 FETCH PRODUCT
     product = db.products.find_one(
         {"productId": product_id},
         {"_id": 0}
     )
 
-    # ❌ CASE 1: Not in DB
+    # ❌ NOT FOUND
     if not product:
         log_verification(False, "Product not found")
         return jsonify({
             "authentic": False,
             "reason": "Product not found in database",
-            "fraudScore": 95
+            "fraudScore": 95,
+            "owner": None
         })
 
     # 🔗 BLOCKCHAIN CHECK
     try:
         is_on_chain = verify_on_chain(product_id)
     except:
+        log_verification(False, "Blockchain error")
         return jsonify({
             "authentic": False,
             "reason": "Blockchain verification failed",
-            "fraudScore": 80
+            "fraudScore": 80,
+            "owner": product.get("owner")
         })
 
-    # ❌ CASE 2: Not on blockchain
     if not is_on_chain:
         log_verification(False, "Not on blockchain")
         return jsonify({
             "authentic": False,
             "product": product,
             "reason": "Product not registered on blockchain",
-            "fraudScore": 85
+            "fraudScore": 85,
+            "owner": product.get("owner")
         })
 
-    # 🔐 HASH CHECK
+    # 🔐 HASH
     expected_hash = hashlib.sha256(
         f"{product['productId']}{product['name']}{product['serial']}".encode()
     ).hexdigest()
-    log_verification(True, "Verified via blockchain")
 
-    # 🔥 STORE VERIFICATION LOG (ONLY IF USER EXISTS)
-    # if user_email:
-    #     existing = db.verification_logs.find_one({
-    #         "productId": product_id,
-    #         "user": user_email
-    #     })
+    # 🔥 GET USER
+    user = db.users.find_one({"email": user_email}) if user_email else None
+    if not user or not user.get("wallet"):
+        log_verification(False, "Invalid user wallet")
+        return jsonify({
+        "authentic": False,
+        "product": product,
+        "reason": "Invalid user or wallet not found",
+        "fraudScore": 70,
+        "hash": expected_hash,
+        "status": "invalid_user",
+        "owner": product.get("owner")
+    })
+    user_wallet = user.get("wallet") if user else None
 
-    #     if not existing:
-    #         db.verification_logs.insert_one({
-    #             "productId": product_id,
-    #             "user": user_email,
-    #             "timestamp": int(time.time()),
-    #             "authentic": True
-    #         })
+    current_owner = product.get("owner")
+    # 🔥 COOLDOWN CHECK
+   
+    last = db.ownership_history.find_one(
+    {"productId": product_id},
+    sort=[("timestamp", -1)]
+    )
+    if last and time.time() - last.get("timestamp", 0) < 5:
+        return jsonify({
+            "error": "Action too fast. Try again."
+        }), 429
+
+    
+
+    # 🚨 CASE 1: PRODUCT NOT OWNED → CLAIM
+    if not current_owner and user_wallet:
+
+    # 🔥 COOLDOWN ONLY FOR CLAIM
+        last = db.ownership_history.find_one(
+        {"productId": product_id},
+        sort=[("timestamp", -1)]
+    )
+
+        if last and time.time() - last.get("timestamp", 0) < 2:
+             return jsonify({"error": "Action too fast"}), 429
+
+        result = db.products.update_one(
+             {
+                 "productId": product_id,
+                 "owner": None
+             },
+             {
+                 "$set": {"owner": user_wallet}
+             }
+         )    
+
+        if result.modified_count == 0:
+            updated = db.products.find_one({"productId": product_id}, {"_id": 0})
+            return jsonify({
+                "authentic": True,
+                "product": updated,
+                "reason": "Product just got claimed by another user",
+                "status": "locked",
+                "fraudScore": 60,
+                "hash": expected_hash,
+                "owner": updated.get("owner")
+            })
+    
+        db.ownership_history.insert_one({
+            "productId": product_id,
+            "from": None,
+            "to": user_wallet,
+            "type": "CLAIM",
+            "timestamp": int(time.time())
+        })
+
+        product["owner"] = user_wallet
+
+        log_verification(True, "Claimed ownership")
+
+        return jsonify({
+            "authentic": True,
+            "product": product,
+            "reason": "Product verified and ownership claimed",
+            "fraudScore": 5,
+            "hash": expected_hash,
+            "status": "claimed",
+            "owner": product.get("owner")
+        })
+
+    # 🚨 CASE 2: SAME USER (OWNER REVERIFY)
+    if current_owner and user_wallet == current_owner:
+
+        log_verification(True, "Owner re-verified")
+
+        return jsonify({
+            "authentic": True,
+            "product": product,
+            "reason": "You are the owner",
+            "fraudScore": 5,
+            "hash": expected_hash,
+            "status": "owner",
+            "owner": product.get("owner")
+        })
+
+    # 🚨 CASE 3: DIFFERENT USER → BLOCK
+    if current_owner and user_wallet != current_owner:
+
+        log_verification(False, "Already owned by another user")
+
+        return jsonify({
+            "authentic": True,
+            "product": product,
+            "reason": "Product already owned by another user",
+            "fraudScore": 60,
+            "status": "locked",
+            "owner": product.get("owner")
+        })
+
+    # 🧩 FALLBACK (NO USER)
+    log_verification(True, "Verified without user")
 
     return jsonify({
         "authentic": True,
         "product": product,
-        "reason": "Verified via blockchain",
+        "reason": "Verified successfully",
         "fraudScore": 5,
-        "hash": expected_hash
+        "hash": expected_hash,
+        "status": "verified",
+        "owner": product.get("owner")
     })
 
 
@@ -170,21 +272,19 @@ def get_product(product_id):
     return jsonify(product)
 
 
-# ================= GET ALL PRODUCTS =================
-@product_routes.route("/", methods=["GET"])
-def get_all_products():
-    db = current_app.config["DB"]
-
-    products = list(db.products.find({}, {"_id": 0}))
-
-    return jsonify(products)
 
 # ================= VERIFIED PRODUCTS =================
 @product_routes.route("/verified", methods=["GET"])
 def get_verified_products():
     db = current_app.config["DB"]
 
-    products = list(db.products.find({}, {"_id": 0}))
+    products = list(db.products.find({}, {
+    "_id": 0,
+    "productId": 1,
+    "name": 1,
+    "serial": 1,
+    "owner": 1
+}))
 
     verified_list = []
 
@@ -208,7 +308,13 @@ import hashlib
 def get_ledger():
     db = current_app.config["DB"]
 
-    products = list(db.products.find({}, {"_id": 0}))
+    products = list(db.products.find({}, {
+    "_id": 0,
+    "productId": 1,
+    "name": 1,
+    "serial": 1,
+    "owner": 1
+}))
 
     ledger = []
 
@@ -241,7 +347,13 @@ def get_ledger():
 def get_analytics():
     db = current_app.config["DB"]
 
-    products = list(db.products.find({}, {"_id": 0}))
+    products = list(db.products.find({}, {
+    "_id": 0,
+    "productId": 1,
+    "name": 1,
+    "serial": 1,
+    "owner": 1
+}))
 
     total = len(products)
     verified = 0
@@ -309,7 +421,13 @@ def service_analytics():
     db = current_app.config["DB"]
 
     repairs = list(db.repairs.find({}, {"_id": 0}))
-    products = list(db.products.find({}, {"_id": 0}))
+    products = list(db.products.find({}, {
+    "_id": 0,
+    "productId": 1,
+    "name": 1,
+    "serial": 1,
+    "owner": 1
+}))
 
     total_repairs = len(repairs)
     completed = len([r for r in repairs if r.get("status") == "completed"])
@@ -379,7 +497,13 @@ def smart_warranty(product_id):
 def smart_warranty_list():
     db = current_app.config["DB"]
 
-    products = list(db.products.find({}, {"_id": 0}))
+    products = list(db.products.find({}, {
+    "_id": 0,
+    "productId": 1,
+    "name": 1,
+    "serial": 1,
+    "owner": 1
+}))
 
     result = []
 
@@ -405,62 +529,6 @@ def smart_warranty_list():
 
     return jsonify(result)
 
-# ================= TRANSFER OWNERSHIP =================
-
-@product_routes.route("/transfer", methods=["POST"])
-def transfer_product():
-    data = request.json
-    db = current_app.config["DB"]
-
-    product_id = data.get("productId")
-    new_owner = data.get("newOwner")
-
-    if not product_id or not new_owner:
-        return jsonify({"error": "Missing fields"}), 400
-
-    product = db.products.find_one({"productId": product_id})
-
-    if not product:
-        return jsonify({"error": "Product not found"}), 404
-
-    old_owner = product.get("owner")
-
-    if old_owner == new_owner:
-        return jsonify({"error": "Already owned by this user"}), 400
-
-    if not new_owner.startswith("0x"):
-        return jsonify({"error": "Invalid wallet address"}), 400
-
-    try:
-        receipt = transfer_ownership(product_id, new_owner)
-
-        tx_hash = (
-            receipt.transactionHash.hex()
-            if receipt and receipt.transactionHash
-            else "N/A"
-        )
-
-        db.products.update_one(
-            {"productId": product_id},
-            {"$set": {"owner": new_owner}}
-        )
-
-        db.ownership_history.insert_one({
-            "productId": product_id,
-            "from": old_owner,
-            "to": new_owner,
-            "txHash": tx_hash,
-            "timestamp": int(time.time())
-        })
-
-        return jsonify({
-            "message": "Ownership transferred",
-            "txHash": tx_hash
-        })
-
-    except Exception as e:
-        print("TRANSFER ERROR:", str(e))  # 🔥 DEBUG
-        return jsonify({"error": str(e)}), 500
     
 # ================= OWNERSHIP HISTORY =================
 @product_routes.route("/ownership/<product_id>", methods=["GET"])
@@ -482,10 +550,12 @@ def get_products():
     db = current_app.config["DB"]
 
     products = list(db.products.find({}, {
-        "_id": 0,
-        "productId": 1,
-        "name": 1
-    }))
+    "_id": 0,
+    "productId": 1,
+    "name": 1,
+    "serial": 1,
+    "owner": 1   # 🔥 CRITICAL
+}))
 
     return jsonify(products)
 
@@ -496,7 +566,7 @@ def get_user_verified(email):
 
     # 🔥 get logs for this user
     logs = list(db.verification_logs.find(
-        {"user": email, "authentic": True},
+        {"user": email.lower(), "authentic": True},
         {"_id": 0}
     ))
 
@@ -525,3 +595,48 @@ def get_user_verified(email):
         })
 
     return jsonify(result)
+
+@product_routes.route("/disown", methods=["POST"])
+def disown_product():
+    data = request.json
+    db = current_app.config["DB"]
+
+    product_id = data.get("productId")
+    email = data.get("email")
+
+
+    user = db.users.find_one({"email": email.lower()})
+    product = db.products.find_one({"productId": product_id})
+
+    if not product:
+        return jsonify({"error": "Product not found"}), 404
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    last = db.ownership_history.find_one(
+    {"productId": product_id},
+    sort=[("timestamp", -1)]
+    )
+
+    if last and time.time() - last.get("timestamp", 0) < 2:
+        return jsonify({"error": "Too many actions"}), 429
+
+    if product.get("owner") != user.get("wallet"):
+        return jsonify({"error": "Not owner"}), 403
+
+    db.products.update_one(
+        {"productId": product_id},
+        {"$set": {"owner": None}}
+    )
+
+    db.ownership_history.insert_one({
+        "productId": product_id,
+        "from": user.get("wallet"),
+        "to": None,
+        "type": "DISOWN",
+        "timestamp": int(time.time())
+    })
+
+    return jsonify({"message": "Ownership released"})
+

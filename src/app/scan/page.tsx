@@ -25,10 +25,13 @@ export default function ScanPage() {
     setManualId(id);
     setStatus("verifying");
     setMessage("Validating on blockchain...");
-
+    const email = localStorage.getItem("email")?.toLowerCase();
     try {
       const res = await axios.get(
         `http://localhost:5000/api/product/verify/${id}`,
+        {
+          params: { email },
+        },
       );
 
       if (res.data.authentic) {
