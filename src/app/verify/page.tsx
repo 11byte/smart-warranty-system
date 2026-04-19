@@ -16,7 +16,14 @@ export default function VerifyListPage() {
   }, []);
 
   const fetchProducts = async () => {
-    const res = await axios.get("http://localhost:5000/api/product/verified");
+    const email = localStorage.getItem("email")?.toLowerCase();
+
+    if (!email) return;
+
+    const res = await axios.get(
+      `http://localhost:5000/api/product/verified/user/${email}`,
+    );
+
     setProducts(res.data);
   };
 

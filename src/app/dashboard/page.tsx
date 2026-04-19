@@ -8,17 +8,30 @@ import { Package, ShieldCheck, AlertTriangle, Activity } from "lucide-react";
 
 export default function Dashboard() {
   const [data, setData] = useState<any>(null);
+  const [role, setRole] = useState<string | null>(null);
 
   useEffect(() => {
+    const storedRole = localStorage.getItem("role");
+    setRole(storedRole);
+
     fetchData();
   }, []);
-
   const fetchData = async () => {
     const res = await axios.get("http://localhost:5000/api/product/analytics");
     setData(res.data);
   };
 
   if (!data) return <div className="text-white p-10">Loading...</div>;
+  if (!role) {
+    return (
+      <div className="bg-gray-950 min-h-screen text-white">
+        <Navbar />
+        <div className="flex items-center justify-center h-[80vh]">
+          <p className="text-gray-400">Please login first</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-gray-950 min-h-screen text-white">
@@ -26,80 +39,134 @@ export default function Dashboard() {
 
       <div className="max-w-7xl mx-auto px-6 py-12">
         {/* HEADER */}
-        <div className="mb-10">
-          <h1 className="text-3xl font-semibold">Smart Warranty Dashboard</h1>
-          <p className="text-gray-400 mt-2">
-            Real-time insights into product authentication & blockchain activity
-          </p>
-        </div>
+        <h1 className="text-3xl font-semibold">
+          {role === "manufacturer"
+            ? "Manufacturer Dashboard"
+            : "User Dashboard"}
+        </h1>
+
+        <p className="text-gray-400 mt-2">
+          {role === "manufacturer"
+            ? "Monitor product lifecycle, fraud detection, and blockchain activity"
+            : "Track your product verifications and warranty insights"}
+        </p>
 
         {/* KPI CARDS */}
         <div className="grid md:grid-cols-4 gap-6 mb-12">
-          <KPI label="Total Products" value={data.total} icon={<Package />} />
+          {role === "manufacturer" ? (
+            <>
+              <KPI
+                label="Total Products"
+                value={data.total}
+                icon={<Package />}
+              />
 
-          <KPI
-            label="Verified"
-            value={data.verified}
-            icon={<ShieldCheck />}
-            color="green"
-          />
+              <KPI
+                label="Verified"
+                value={data.verified}
+                icon={<ShieldCheck />}
+                color="green"
+              />
 
-          <KPI
-            label="Fraud Detected"
-            value={data.fake}
-            icon={<AlertTriangle />}
-            color="red"
-          />
+              <KPI
+                label="Fraud Detected"
+                value={data.fake}
+                icon={<AlertTriangle />}
+                color="red"
+              />
 
-          <KPI
-            label="System Activity"
-            value={data.recent.length}
-            icon={<Activity />}
-          />
+              <KPI
+                label="System Activity"
+                value={data.recent.length}
+                icon={<Activity />}
+              />
+            </>
+          ) : (
+            <>
+              <KPI
+                label="Products Scanned"
+                value={data.total}
+                icon={<Package />}
+              />
+
+              <KPI
+                label="Successful Verifications"
+                value={data.verified}
+                icon={<ShieldCheck />}
+                color="green"
+              />
+
+              <KPI
+                label="Fraud Alerts"
+                value={data.fake}
+                icon={<AlertTriangle />}
+                color="red"
+              />
+
+              <KPI
+                label="Recent Activity"
+                value={data.recent.length}
+                icon={<Activity />}
+              />
+            </>
+          )}
         </div>
 
         {/* CHARTS */}
-        <div className="grid md:grid-cols-2 gap-6 mb-12">
-          {/* Verification Ratio */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-            <h2 className="mb-4">Verification Ratio</h2>
+        {role === "manufacturer" ? (
+          <div className="grid md:grid-cols-2 gap-6 mb-12">
+            {/* Verification Ratio */}
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <h2 className="mb-4">Verification Ratio</h2>
+
+              <div className="w-full bg-gray-800 h-4 rounded-full">
+                <div
+                  style={{
+                    width: `${(data.verified / data.total) * 100}%`,
+                  }}
+                  className="h-full bg-green-500 rounded-full"
+                />
+              </div>
+            </div>
+
+            {/* Fraud */}
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <h2 className="mb-4">Fraud Risk</h2>
+
+              <div className="w-full bg-gray-800 h-4 rounded-full">
+                <div
+                  style={{
+                    width: `${(data.fake / data.total) * 100}%`,
+                  }}
+                  className="h-full bg-red-500 rounded-full"
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-12">
+            <h2 className="mb-4">Your Verification Success</h2>
 
             <div className="w-full bg-gray-800 h-4 rounded-full">
               <div
                 style={{
                   width: `${(data.verified / data.total) * 100}%`,
                 }}
-                className="h-full bg-green-500 rounded-full transition-all"
+                className="h-full bg-blue-500 rounded-full"
               />
             </div>
 
             <p className="text-sm text-gray-400 mt-2">
-              {data.verified} verified / {data.total}
+              You verified {data.verified} products
             </p>
           </div>
-
-          {/* Fraud Indicator */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-            <h2 className="mb-4">Fraud Risk Level</h2>
-
-            <div className="w-full bg-gray-800 h-4 rounded-full">
-              <div
-                style={{
-                  width: `${(data.fake / data.total) * 100}%`,
-                }}
-                className="h-full bg-red-500 rounded-full"
-              />
-            </div>
-
-            <p className="text-sm text-gray-400 mt-2">
-              {data.fake} suspicious products
-            </p>
-          </div>
-        </div>
+        )}
 
         {/* ACTIVITY FEED */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-          <h2 className="text-lg font-semibold mb-6">Live Activity Feed</h2>
+          <h2 className="text-lg font-semibold mb-6">
+            {role === "manufacturer" ? "Global Activity Feed" : "Your Activity"}
+          </h2>
 
           <div className="space-y-4">
             {data.recent.map((a: any, i: number) => (

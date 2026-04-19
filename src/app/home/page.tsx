@@ -15,48 +15,58 @@ import { useState, useRef, useEffect, forwardRef, ReactNode } from "react";
 
 /* ================= DATA ================= */
 
-const features = [
+const allFeatures = [
+  // MANUFACTURER
   {
+    role: "manufacturer",
     icon: <Factory size={28} />,
     title: "Register Product",
-    desc: "Manufacturer creates a secure blockchain identity for each product.",
+    desc: "Create blockchain identity for products",
     href: "/manufacturer/register",
   },
   {
-    icon: <QrCode size={28} />,
-    title: "Scan Product",
-    desc: "Scan the QR code to access product details instantly.",
-    href: "/scan",
-  },
-  {
-    icon: <ShieldCheck size={28} />,
-    title: "Verify Authenticity",
-    desc: "Ensure the product is genuine using blockchain validation.",
-    href: "/verify",
-  },
-  {
-    icon: <ShieldCheck size={28} />,
-    title: "Smart Warranty",
-    desc: "Provision Blockchain based Smart Warranty sytem",
-    href: "/smart-warranty",
-  },
-  {
+    role: "manufacturer",
     icon: <Database size={28} />,
     title: "Blockchain Ledger",
-    desc: "View immutable product records stored on blockchain.",
+    desc: "View immutable records",
     href: "/ledger",
   },
   {
-    icon: <Wrench size={28} />,
-    title: "Service History",
-    desc: "Track all repairs and maintenance history securely.",
-    href: "/service",
-  },
-  {
+    role: "manufacturer",
     icon: <Repeat size={28} />,
     title: "Ownership Transfer",
-    desc: "Transfer product ownership transparently.",
+    desc: "Transfer product ownership",
     href: "/transfer",
+  },
+
+  // USER
+  {
+    role: "user",
+    icon: <QrCode size={28} />,
+    title: "Scan Product",
+    desc: "Scan QR to access product details",
+    href: "/scan",
+  },
+  {
+    role: "user",
+    icon: <ShieldCheck size={28} />,
+    title: "Verify Authenticity",
+    desc: "Check product authenticity",
+    href: "/verify",
+  },
+  {
+    role: "user",
+    icon: <ShieldCheck size={28} />,
+    title: "Smart Warranty",
+    desc: "View blockchain warranty",
+    href: "/smart-warranty",
+  },
+  {
+    role: "user",
+    icon: <Wrench size={28} />,
+    title: "Service History",
+    desc: "Track repairs",
+    href: "/service",
   },
 ];
 
@@ -67,6 +77,13 @@ export default function Home() {
 
   // 🔹 refs for auto-scroll
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [role, setRole] = useState<string | null>(null);
+  const features = allFeatures.filter((f) => f.role === role);
+
+  useEffect(() => {
+    const storedRole = localStorage.getItem("role");
+    setRole(storedRole);
+  }, []);
 
   // 🔹 auto-scroll effect
   useEffect(() => {
@@ -77,7 +94,16 @@ export default function Home() {
       });
     }
   }, [activeStep]);
-
+  if (!role) {
+    return (
+      <div className="bg-gray-950 min-h-screen text-white">
+        <Navbar />
+        <div className="flex items-center justify-center h-[80vh]">
+          <p className="text-gray-400">Please login to access dashboard</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <main className="bg-gray-950 text-white min-h-screen relative">
       <Navbar />
@@ -89,7 +115,7 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           className="text-4xl font-semibold"
         >
-          Smart Warranty Dashboard
+          {role === "manufacturer" ? "Manufacturer Home" : "User Home"}
         </motion.h1>
 
         <p className="text-gray-400 mt-4 text-sm max-w-xl mx-auto">

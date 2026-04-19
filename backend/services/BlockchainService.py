@@ -15,15 +15,31 @@ contract_address = "0x5FbDB2315678afecb367f032d93F642f64180aa3"
 contract = w3.eth.contract(address=contract_address, abi=abi)
 
 
-def register_on_chain(product):
-    tx_hash = contract.functions.registerProduct(
-        product["productId"],
-        product["name"],
-        product["serial"]
-    ).transact({"from": account})
+def register_on_chain(product_id, name, serial):
+    tx = contract.functions.registerProduct(
+        product_id,
+        name,
+        serial
+    ).transact({
+        "from": w3.eth.accounts[0]
+    })
 
-    return w3.to_hex(tx_hash)
+    receipt = w3.eth.wait_for_transaction_receipt(tx)
+
+    return receipt
 
 
 def verify_on_chain(product_id):
     return contract.functions.verifyProduct(product_id).call()
+
+def transfer_ownership(product_id, new_owner):
+    tx = contract.functions.transferOwnership(
+        product_id,
+        new_owner
+    ).transact({
+        "from": w3.eth.accounts[0]
+    })
+
+    receipt = w3.eth.wait_for_transaction_receipt(tx)
+
+    return receipt

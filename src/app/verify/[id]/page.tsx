@@ -34,8 +34,10 @@ export default function VerifyPage() {
       setStep(2);
       await delay(1000);
 
+      const email = localStorage.getItem("email");
+
       const res = await axios.get(
-        `http://localhost:5000/api/product/verify/${id}`,
+        `http://localhost:5000/api/product/verify/${id}?email=${email}`,
       );
 
       setData(res.data);

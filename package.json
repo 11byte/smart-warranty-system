@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@zxing/browser": "^0.1.5",
-    "axios": "^1.13.6",
+    "axios": "^1.14.0",
     "framer-motion": "^12.35.1",
     "html5-qrcode": "^2.3.8",
     "jsqr": "^1.4.0",

@@ -14,3 +14,14 @@ Terminal 2:
 
 Terminal 3:
 - cd backend
+- python app.py
+
+
+
+
+Sample user accounts:
+omkarchandgaonkar@gmailcom  - Authify@2004
+paresh@gmail.com - paresh123
+
+Sample manufacturer accounts:
+manas@gmail.com - manas123
