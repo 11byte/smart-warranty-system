@@ -42,6 +42,7 @@ export default function ScanPage() {
       } else {
         setStatus("error");
         setMessage(res.data.reason || "Fake product");
+        setTimeout(() => router.push(`/verify/${id}`), 1200);
       }
     } catch {
       setStatus("error");
